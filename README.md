@@ -7,15 +7,26 @@ patterns from <http://dailycrossstitch.com/>.
 
 Tested with Python 3.5. Probably works under Python 2.
 
-Install with:
+*   Install with:
 
-    git clone https://github.com/myersjustinc/stitchbot.git
-    cd stitchbot
-    pip install -r requirements.txt
+        git clone https://github.com/myersjustinc/stitchbot.git
+        cd stitchbot
+        pip install -r requirements.txt
 
-Run once with:
+*   Configure as described in "Configuration" below.
 
-    ./stitchbot.py
+*   Run once with:
+
+        ./stitchbot.py
+
+## Configuration ##
+
+You need an account on `dailycrossstitch.com` in order for this to work. Once
+you have one, set the `STITCHBOT_USERNAME` and `STITCHBOT_PASSWORD` environment
+variables to your username and password on that site, respectively.
+
+I like to use [virtualenvs](https://virtualenv.pypa.io/en/latest/) for this,
+but do whatever you want.
 
 ## Scheduling ##
 
