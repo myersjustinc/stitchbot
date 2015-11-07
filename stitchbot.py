@@ -194,6 +194,8 @@ def main(output_path=None, *args):
 
     local_filenames = StitchBot(output_path).scrape()
 
+    # FIXME: Overwrite the same file if we already have it, rather than adding
+    # multiple identically named copies of the same file.
     child_logger.info('Saving to Google Drive')
     service = get_drive_service()
     parent = ensure_parent(service)
