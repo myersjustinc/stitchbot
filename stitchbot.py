@@ -58,6 +58,15 @@ def ensure_parent(service, name='Stitchbot patterns'):
     return folder
 
 
+def remove_file_if_exists(service, file_name, mime_type):
+    files_list = service.files().list().execute()
+    for item in files_list['items']:
+        if item['title'] == file_name and item['mimeType'] == mime_type:
+            service.files().delete(fileId=item['id']).execute()
+            return True
+    return False
+
+
 def upload_file(service, file_name, mime_type):
     media_body = MediaFileUpload(file_name, mimetype=mime_type, resumable=True)
     base_name = os.path.basename(file_name)
@@ -194,18 +203,24 @@ def main(output_path=None, *args):
 
     local_filenames = StitchBot(output_path).scrape()
 
-    # FIXME: Overwrite the same file if we already have it, rather than adding
-    # multiple identically named copies of the same file.
     child_logger.info('Saving to Google Drive')
     service = get_drive_service()
     parent = ensure_parent(service)
     child_logger.info('Saving to parent ID {0}'.format(parent['id']))
     for file_name in local_filenames:
         child_logger.info('Saving {0}'.format(file_name))
+
+        base_name = os.path.basename(file_name)
+        removed = remove_file_if_exists(service, base_name, 'application/pdf')
+        if removed:
+            child_logger.info('Removed existing {0}'.format(base_name))
+
         remote_file = upload_file(service, file_name, 'application/pdf')
         child_logger.info('Uploaded {0}'.format(file_name))
+
         move_to_parent(service, remote_file, parent)
         child_logger.info('Moved {0}'.format(file_name))
+
         child_logger.info('Done with {0}'.format(file_name))
 
     child_logger.info('Done')
