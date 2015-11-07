@@ -206,7 +206,6 @@ def main(output_path=None, *args):
         child_logger.info('Moved {0}'.format(file_name))
         child_logger.info('Done with {0}'.format(file_name))
 
-
     child_logger.info('Done')
 
 
