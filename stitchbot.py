@@ -43,6 +43,20 @@ def get_drive_service():
     return service
 
 
+def ensure_parent(service, name='Stitchbot patterns'):
+    # Look for a folder with the given name. If we find it, return its ID.
+    folder_type = 'application/vnd.google-apps.folder'
+    items_response = service.files().list().execute()
+    for item in items_response['items']:
+        if item['mimeType'] == folder_type and item['title'] == name:
+            return item
+
+    # If we're here, we haven't found one. Create one and return its ID.
+    folder = service.files().insert(body={
+        'title': name, 'mimeType': folder_type}).execute()
+    return folder
+
+
 def upload_file(service, file_name, mime_type):
     media_body = MediaFileUpload(file_name, mimetype=mime_type, resumable=True)
     base_name = os.path.basename(file_name)
@@ -52,6 +66,12 @@ def upload_file(service, file_name, mime_type):
         'mimeType': mime_type
     }
     return service.files().insert(body=body, media_body=media_body).execute()
+
+
+def move_to_parent(service, file_to_move, new_parent):
+    file_to_move['parents'] = [new_parent]
+    return service.files().update(
+        fileId=file_to_move['id'], body=file_to_move).execute()
 
 
 class StitchBot(object):
@@ -178,10 +198,16 @@ def main(output_path=None, *args):
 
     child_logger.info('Saving to Google Drive')
     service = get_drive_service()
+    parent = ensure_parent(service)
+    child_logger.info('Saving to parent ID {0}'.format(parent['id']))
     for file_name in local_filenames:
-        child_logger.info('Uploading {0}'.format(file_name))
-        upload_file(service, file_name, 'application/pdf')
+        child_logger.info('Saving {0}'.format(file_name))
+        remote_file = upload_file(service, file_name, 'application/pdf')
         child_logger.info('Uploaded {0}'.format(file_name))
+        move_to_parent(service, remote_file, parent)
+        child_logger.info('Moved {0}'.format(file_name))
+        child_logger.info('Done with {0}'.format(file_name))
+
 
     child_logger.info('Done')
 
