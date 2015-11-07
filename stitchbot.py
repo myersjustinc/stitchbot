@@ -5,6 +5,11 @@ import os
 import re
 import sys
 
+from apiclient.discovery import build
+from apiclient.http import MediaFileUpload
+from httplib2 import Http
+from oauth2client.client import AccessTokenCredentials
+import requests
 from robobrowser import RoboBrowser
 
 
@@ -13,6 +18,40 @@ logger.setLevel(logging.DEBUG)
 console_handler = logging.StreamHandler()
 console_handler.setLevel(logging.INFO)
 logger.addHandler(console_handler)
+
+
+def get_access_token(client_id, client_secret, refresh_token):
+    r = requests.post(
+        'https://www.googleapis.com/oauth2/v3/token',
+        data={
+            'client_id': client_id,
+            'client_secret': client_secret,
+            'grant_type': 'refresh_token',
+            'refresh_token': refresh_token,
+        })
+    return r.json()['access_token']
+
+
+def get_drive_service():
+    access_token = get_access_token(
+        os.environ['GOOGLE_CLIENT_ID'],
+        os.environ['GOOGLE_CLIENT_SECRET'],
+        os.environ['GOOGLE_REFRESH_TOKEN'])
+    http = AccessTokenCredentials(
+        access_token, 'stitchbot/1.0').authorize(Http())
+    service = build('drive', 'v2', http=http)
+    return service
+
+
+def upload_file(service, file_name, mime_type):
+    media_body = MediaFileUpload(file_name, mimetype=mime_type, resumable=True)
+    base_name = os.path.basename(file_name)
+    body = {
+        'description': base_name,
+        'title': base_name,
+        'mimeType': mime_type
+    }
+    return service.files().insert(body=body, media_body=media_body).execute()
 
 
 class StitchBot(object):
@@ -34,9 +73,11 @@ class StitchBot(object):
 
         self.log_in()
         self.navigate_to_free_pattern()
-        self.download_pattern()
+        scraped_filenames = self.download_pattern()
 
         self.log(logging.INFO, 'scrape', 'Scrape complete')
+
+        return scraped_filenames
 
     def log_in(self):
         self.log(logging.INFO, 'log_in', 'Logging in')
@@ -66,10 +107,12 @@ class StitchBot(object):
         download_buttons = self.browser.find_all(
             'a', class_='single_add_to_cart_button')
         download_urls = list(map(itemgetter('href'), download_buttons))
-        for url in download_urls:
-            self.download_pattern_file(url)
+        local_filenames = [
+            self.download_pattern_file(url) for url in download_urls]
 
         self.log(logging.INFO, 'download_pattern', 'Downloaded pattern')
+
+        return local_filenames
 
     def download_pattern_file(self, url):
         self.log(
@@ -89,11 +132,13 @@ class StitchBot(object):
         pdf_url = pdf_url_match.group(1)
         self.browser.open(pdf_url)
 
-        self.save_pattern(self.browser.response)
+        output_filename = self.save_pattern(self.browser.response)
 
         self.log(
             logging.INFO, 'download_pattern_file',
             'Downloaded pattern file at {0}'.format(url))
+
+        return output_filename
 
     def save_pattern(self, response):
         self.log(logging.INFO, 'save_pattern', 'Saving pattern')
@@ -112,6 +157,8 @@ class StitchBot(object):
             logging.INFO, 'save_pattern',
             'Saved pattern to {0}'.format(output_filename))
 
+        return output_filename
+
     def get_filename(self, headers, default_filename='pattern.pdf'):
         filename_match = re.search(
             r'filename="?([^"]+)"?', headers.get('Content-Disposition', ''))
@@ -122,10 +169,21 @@ class StitchBot(object):
 
 
 def main(output_path=None, *args):
+    child_logger = logger.getChild('main')
+
     if output_path is None:
         output_path = os.path.join(os.path.dirname(__file__), 'output')
 
-    StitchBot(output_path).scrape()
+    local_filenames = StitchBot(output_path).scrape()
+
+    child_logger.info('Saving to Google Drive')
+    service = get_drive_service()
+    for file_name in local_filenames:
+        child_logger.info('Uploading {0}'.format(file_name))
+        upload_file(service, file_name, 'application/pdf')
+        child_logger.info('Uploaded {0}'.format(file_name))
+
+    child_logger.info('Done')
 
 
 if __name__ == '__main__':
