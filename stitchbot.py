@@ -4,6 +4,7 @@ from operator import itemgetter
 import os
 import re
 import sys
+import tempfile
 
 from apiclient.discovery import build
 from apiclient.http import MediaFileUpload
@@ -75,9 +76,9 @@ def move_to_parent(service, file_to_move, new_parent):
 
 
 class StitchBot(object):
-    def __init__(self, output_path, username=None, password=None):
+    def __init__(self, output_path=None, username=None, password=None):
         self.browser = RoboBrowser(history=True)
-        self.output_path = output_path
+        self.output_path = output_path or tempfile.TemporaryDirectory().name
 
         self.username = username or os.environ['STITCHBOT_USERNAME']
         self.password = password or os.environ['STITCHBOT_PASSWORD']
@@ -190,9 +191,6 @@ class StitchBot(object):
 
 def main(output_path=None, *args):
     child_logger = logger.getChild('main')
-
-    if output_path is None:
-        output_path = os.path.join(os.path.dirname(__file__), 'output')
 
     local_filenames = StitchBot(output_path).scrape()
 
