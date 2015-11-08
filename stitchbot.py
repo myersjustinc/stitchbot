@@ -21,67 +21,102 @@ console_handler.setLevel(logging.INFO)
 logger.addHandler(console_handler)
 
 
-def get_access_token(client_id, client_secret, refresh_token):
-    r = requests.post(
-        'https://www.googleapis.com/oauth2/v3/token',
-        data={
-            'client_id': client_id,
-            'client_secret': client_secret,
-            'grant_type': 'refresh_token',
-            'refresh_token': refresh_token,
-        })
-    return r.json()['access_token']
+class DriveFolder(object):
+    def __init__(self, folder_name):
+        self.folder_name = folder_name
 
+        self.logger = logger.getChild('DriveFolder')
 
-def get_drive_service():
-    access_token = get_access_token(
-        os.environ['GOOGLE_CLIENT_ID'],
-        os.environ['GOOGLE_CLIENT_SECRET'],
-        os.environ['GOOGLE_REFRESH_TOKEN'])
-    http = AccessTokenCredentials(
-        access_token, 'stitchbot/1.0').authorize(Http())
-    service = build('drive', 'v2', http=http)
-    return service
+        self.service = self._get_drive_service(self._get_access_token())
 
+        self.folder = self.ensure_folder()
+        self.log(
+            logging.INFO, '__init__',
+            'Saving to folder ID {0}'.format(self.folder['id']))
 
-def ensure_parent(service, name='Stitchbot patterns'):
-    # Look for a folder with the given name. If we find it, return its ID.
-    folder_type = 'application/vnd.google-apps.folder'
-    items_response = service.files().list().execute()
-    for item in items_response['items']:
-        if item['mimeType'] == folder_type and item['title'] == name:
-            return item
+    def log(self, level, method_name, message, *args, **kwargs):
+        child_logger = self.logger.getChild(method_name)
+        child_logger.log(level, message, *args, **kwargs)
 
-    # If we're here, we haven't found one. Create one and return its ID.
-    folder = service.files().insert(body={
-        'title': name, 'mimeType': folder_type}).execute()
-    return folder
+    def upload_files(self, local_filenames):
+        for file_name in local_filenames:
+            self.log(
+                logging.INFO, 'upload_files', 'Saving {0}'.format(file_name))
 
+            self.remove_file_if_exists(file_name, 'application/pdf')
+            remote_file = self.upload_file(file_name, 'application/pdf')
+            self.move_to_parent(remote_file)
 
-def remove_file_if_exists(service, file_name, mime_type):
-    files_list = service.files().list().execute()
-    for item in files_list['items']:
-        if item['title'] == file_name and item['mimeType'] == mime_type:
-            service.files().delete(fileId=item['id']).execute()
-            return True
-    return False
+            self.log(
+                logging.INFO, 'upload_files',
+                'Done with {0}'.format(file_name))
 
+    def ensure_folder(self):
+        # Look for a folder with the given name. If we find it, return it.
+        folder_type = 'application/vnd.google-apps.folder'
+        items_response = self.service.files().list().execute()
+        for item in items_response['items']:
+            if (
+                    item['mimeType'] == folder_type and
+                    item['title'] == self.folder_name):
+                return item
 
-def upload_file(service, file_name, mime_type):
-    media_body = MediaFileUpload(file_name, mimetype=mime_type, resumable=True)
-    base_name = os.path.basename(file_name)
-    body = {
-        'description': base_name,
-        'title': base_name,
-        'mimeType': mime_type
-    }
-    return service.files().insert(body=body, media_body=media_body).execute()
+        # If we're here, we haven't found one. Create one and return it.
+        folder = self.service.files().insert(body={
+            'title': self.folder_name, 'mimeType': folder_type}).execute()
+        return folder
 
+    def remove_file_if_exists(self, file_name, mime_type):
+        base_name = os.path.basename(file_name)
+        files_list = self.service.files().list().execute()
+        for item in files_list['items']:
+            if item['title'] == base_name and item['mimeType'] == mime_type:
+                self.service.files().delete(fileId=item['id']).execute()
+                self.log(
+                    logging.INFO, 'remove_file_if_exists',
+                    'Removed existing {0}'.format(base_name))
+                return True
+        return False
 
-def move_to_parent(service, file_to_move, new_parent):
-    file_to_move['parents'] = [new_parent]
-    return service.files().update(
-        fileId=file_to_move['id'], body=file_to_move).execute()
+    def upload_file(self, file_name, mime_type):
+        media_body = MediaFileUpload(
+            file_name, mimetype=mime_type, resumable=True)
+        base_name = os.path.basename(file_name)
+        body = {
+            'description': base_name,
+            'title': base_name,
+            'mimeType': mime_type
+        }
+        response = self.service.files().insert(
+            body=body, media_body=media_body).execute()
+        self.log(logging.INFO, 'upload_file', 'Uploaded {0}'.format(file_name))
+        return response
+
+    def move_to_parent(self, file_to_move):
+        file_to_move['parents'] = [self.folder]
+        response = self.service.files().update(
+            fileId=file_to_move['id'], body=file_to_move).execute()
+        self.log(
+            logging.INFO, 'upload_files',
+            'Moved {0}'.format(file_to_move['title']))
+        return response
+
+    def _get_access_token(self):
+        r = requests.post(
+            'https://www.googleapis.com/oauth2/v3/token',
+            data={
+                'client_id': os.environ['GOOGLE_CLIENT_ID'],
+                'client_secret': os.environ['GOOGLE_CLIENT_SECRET'],
+                'grant_type': 'refresh_token',
+                'refresh_token': os.environ['GOOGLE_REFRESH_TOKEN'],
+            })
+        return r.json()['access_token']
+
+    def _get_drive_service(self, access_token):
+        http = AccessTokenCredentials(
+            access_token, 'stitchbot/1.0').authorize(Http())
+        service = build('drive', 'v2', http=http)
+        return service
 
 
 class StitchBot(object):
@@ -199,31 +234,8 @@ class StitchBot(object):
 
 
 def main(output_path=None, *args):
-    child_logger = logger.getChild('main')
-
     local_filenames = StitchBot(output_path).scrape()
-
-    child_logger.info('Saving to Google Drive')
-    service = get_drive_service()
-    parent = ensure_parent(service)
-    child_logger.info('Saving to parent ID {0}'.format(parent['id']))
-    for file_name in local_filenames:
-        child_logger.info('Saving {0}'.format(file_name))
-
-        base_name = os.path.basename(file_name)
-        removed = remove_file_if_exists(service, base_name, 'application/pdf')
-        if removed:
-            child_logger.info('Removed existing {0}'.format(base_name))
-
-        remote_file = upload_file(service, file_name, 'application/pdf')
-        child_logger.info('Uploaded {0}'.format(file_name))
-
-        move_to_parent(service, remote_file, parent)
-        child_logger.info('Moved {0}'.format(file_name))
-
-        child_logger.info('Done with {0}'.format(file_name))
-
-    child_logger.info('Done')
+    DriveFolder('Stitchbot patterns').upload_files(local_filenames)
 
 
 if __name__ == '__main__':
