@@ -53,14 +53,16 @@ Drive. To get those:
 *   Enable the Drive API.
 
 *   Run `get_google_token.py` with your client ID and client secret as
-    environment variables, such as:
+    environment variables, with the Google Drive API scope
+    `https://www.googleapis.com/auth/drive.file` as an argument at the end,
+    such as:
 
-        GOOGLE_CLIENT_ID='long-string-of-gibberish' GOOGLE_CLIENT_SECRET='another-gibberish-string' ./get_google_token.py
+        GOOGLE_CLIENT_ID='long-string-of-gibberish' GOOGLE_CLIENT_SECRET='another-gibberish-string' ./get_google_token.py https://www.googleapis.com/auth/drive.file
 
     and follow its instructions.
 
-    (TODO: Allow these things to be passed as proper command-line arguments in
-    case that's easier for people.)
+    (TODO: Allow more of these things to be passed as proper command-line
+    arguments in case that's easier for people.)
 
 *   Make note of the refresh token it gives you.
 
