@@ -78,4 +78,51 @@ Drive. To get those:
 
 ## Scheduling ##
 
-TK
+You just have to run `./stitchbot.py` once for each day on which you want to
+download the free pattern. [cron][cron] is handy for this, but I designed it
+for use with [Heroku Scheduler][scheduler].
+
+Because of that, there's a little [Flask][flask] app in here that'll work just
+fine on Heroku. (It basically just says hi and points visitors to this repo.)
+
+Here's how to do that:
+
+*   **Push Stitchbot to Heroku**
+
+    Basically, just follow the first few steps of
+    [this Heroku tutorial][heroku-python].
+
+    In "Prepare the app", clone this repo
+    (`https://github.com/myersjustinc/stitchbot.git`) instead of the one they
+    tell you to.
+
+    After "Deploy the app", you can stop and keep following this README
+    instead.
+
+*   **Set config vars**
+
+    In our case, that'll mean running:
+
+        heroku config:set STITCHBOT_USERNAME='your_daily_cross_stitch_username' STITCHBOT_PASSWORD='your_daily_cross_stitch_password' GOOGLE_CLIENT_ID='your_client_id' GOOGLE_CLIENT_SECRET='your_client_secret' GOOGLE_REFRESH_TOKEN='your_refresh_token'
+
+    See the "Configuration" section above for more on obtaining those.
+
+*   **Schedule Stitchbot to run**
+
+    *   Add Scheduler to your app:
+
+            heroku addons:create scheduler:standard
+
+    *   Open the Scheduler dashboard:
+
+            heroku addons:open scheduler
+
+    *   Add a new job that runs daily (pick your favorite time). It should run
+        `./stitchbot.py`.
+
+    *   Sit back and collect patterns!
+
+[cron]: https://en.wikipedia.org/wiki/Cron
+[scheduler]: https://devcenter.heroku.com/articles/scheduler
+[flask]: http://flask.pocoo.org/
+[heroku-python]: https://devcenter.heroku.com/articles/getting-started-with-python
