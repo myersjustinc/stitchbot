@@ -31,6 +31,11 @@ Tested with Python 3.5. Probably works under Python 2.
 
         ./stitchbot.py
 
+    If you want to save your patterns to a local directory as well as to Google
+    Drive, just add the path to that directory as an argument:
+
+        ./stitchbot.py my_patterns
+
 [google-console]: https://console.developers.google.com/.
 [google-intro]: https://developers.google.com/console/help/new/#managingprojects
 [oauth]: https://support.google.com/cloud/answer/6158849?hl=en&ref_topic=6262490
