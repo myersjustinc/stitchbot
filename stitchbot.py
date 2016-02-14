@@ -51,11 +51,31 @@ class DriveFolder(object):
                 logging.INFO, 'upload_files',
                 'Done with {0}'.format(file_name))
 
+    def list_items(self):
+        # Use the cached version of this list if available.
+        if hasattr(self, '_items'):
+            self.log(logging.INFO, 'list_items', 'Using cached list of items')
+            return self._items
+
+        # Get a list of all items this application has stored, traversing
+        # paginated results as necessary.
+        items = []
+        resource = self.service.files()
+        request = resource.list()
+        while request is not None:
+            page = request.execute()
+            items.extend(page['items'])
+            request = resource.list_next(request, page)
+
+        # Cache and return the list.
+        self.log(logging.INFO, 'list_items', 'Caching list of items')
+        self._items = items
+        return items
+
     def ensure_folder(self):
         # Look for a folder with the given name. If we find it, return it.
         folder_type = 'application/vnd.google-apps.folder'
-        items_response = self.service.files().list().execute()
-        for item in items_response['items']:
+        for item in self.list_items():
             if (
                     item['mimeType'] == folder_type and
                     item['title'] == self.folder_name):
@@ -68,8 +88,7 @@ class DriveFolder(object):
 
     def remove_file_if_exists(self, file_name, mime_type):
         base_name = os.path.basename(file_name)
-        files_list = self.service.files().list().execute()
-        for item in files_list['items']:
+        for item in self.list_items():
             if item['title'] == base_name and item['mimeType'] == mime_type:
                 self.service.files().delete(fileId=item['id']).execute()
                 self.log(
