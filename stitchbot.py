@@ -1,6 +1,5 @@
 #!/usr/bin/env python
 import logging
-from operator import itemgetter
 import os
 import re
 import sys
@@ -139,12 +138,17 @@ class DriveFolder(object):
 
 
 class StitchBot(object):
-    def __init__(self, output_path=None, username=None, password=None):
+    def __init__(
+            self, output_path=None, username=None, password=None,
+            first_name=None, last_name=None):
         self.browser = RoboBrowser(history=True)
         self.output_path = output_path or tempfile.TemporaryDirectory().name
 
         self.username = username or os.environ['STITCHBOT_USERNAME']
         self.password = password or os.environ['STITCHBOT_PASSWORD']
+
+        self.first_name = first_name or os.environ['USER_FIRST_NAME']
+        self.last_name = last_name or os.environ['USER_LAST_NAME']
 
         self.logger = logger.getChild('StitchBot')
 
@@ -178,9 +182,15 @@ class StitchBot(object):
         self.log(
             logging.INFO, 'navigate_to_free_pattern', 'Finding free pattern')
 
-        self.browser.open('http://dailycrossstitch.com/')
-        free_button = self.browser.find('a', class_='button', string='FREE')
-        self.browser.follow_link(free_button)
+        self.browser.open(
+            'http://dailycrossstitch.com/product-category/'
+            'todays-free-cross-stitch-chart/')
+        pattern_title = self.browser.find(
+            'h2', class_='woocommerce-loop-product__title',
+            string=re.compile(r'^FREE'))
+        pattern_link = pattern_title.find_parent(
+            'a', class_='woocommerce-LoopProduct-link')
+        self.browser.follow_link(pattern_link)
 
         self.log(
             logging.INFO, 'navigate_to_free_pattern', 'Found free pattern')
@@ -188,43 +198,44 @@ class StitchBot(object):
     def download_pattern(self):
         self.log(logging.INFO, 'download_pattern', 'Downloading pattern')
 
+        add_to_cart_form = self.browser.get_form(class_='cart')
+        self.browser.submit_form(add_to_cart_form)
+        self.browser.open('http://dailycrossstitch.com/checkout/')
+
+        checkout_form = self.browser.get_form(class_='checkout')
+        checkout_form['billing_first_name'] = self.first_name
+        checkout_form['billing_last_name'] = self.last_name
+        self.browser.submit_form(checkout_form)
+
+        self.log(logging.INFO, 'download_pattern', 'Checked out')
+
         download_buttons = self.browser.find_all(
-            'a', class_='single_add_to_cart_button')
-        download_urls = list(map(itemgetter('href'), download_buttons))
+            'a', class_='woocommerce-MyAccount-downloads-file')
         local_filenames = [
-            self.download_pattern_file(url) for url in download_urls]
+            self.download_pattern_from_button(button)
+            for button in download_buttons]
 
         self.log(logging.INFO, 'download_pattern', 'Downloaded pattern')
 
         return local_filenames
 
-    def download_pattern_file(self, url):
+    def download_pattern_from_button(self, button):
+        pattern_name = button.text.strip()
         self.log(
-            logging.INFO, 'download_pattern_file',
-            'Downloading pattern file at {0}'.format(url))
+            logging.INFO, 'download_pattern_from_button',
+            'Downloading pattern file named {0}'.format(pattern_name))
 
-        self.browser.open(url)
-        download_script = self.browser.find(
-            'script', string=re.compile(r'^\s*function startDownload'))
-        if not download_script:
-            return
-
-        pdf_url_match = re.search(r'(http.+\.pdf)', download_script.string)
-        if not pdf_url_match:
-            return
-
-        pdf_url = pdf_url_match.group(1)
-        self.browser.open(pdf_url)
-
-        output_filename = self.save_pattern(self.browser.response)
+        self.browser.open(button['href'])
+        output_filename = self.save_pattern(
+            self.browser.response, pattern_name)
 
         self.log(
-            logging.INFO, 'download_pattern_file',
-            'Downloaded pattern file at {0}'.format(url))
+            logging.INFO, 'download_pattern_from_button',
+            'Downloaded pattern file named {0}'.format(pattern_name))
 
         return output_filename
 
-    def save_pattern(self, response):
+    def save_pattern(self, response, name):
         self.log(logging.INFO, 'save_pattern', 'Saving pattern')
 
         try:
@@ -232,7 +243,7 @@ class StitchBot(object):
         except OSError:
             pass
 
-        filename = self.get_filename(response.headers)
+        filename = '{0}.pdf'.format(name)
         output_filename = os.path.join(self.output_path, filename)
         with open(output_filename, 'wb') as output_file:
             output_file.write(response.content)
@@ -242,14 +253,6 @@ class StitchBot(object):
             'Saved pattern to {0}'.format(output_filename))
 
         return output_filename
-
-    def get_filename(self, headers, default_filename='pattern.pdf'):
-        filename_match = re.search(
-            r'filename="?([^"]+)"?', headers.get('Content-Disposition', ''))
-        if not filename_match:
-            return default_filename
-
-        return filename_match.group(1)
 
 
 def main(output_path=None, *args):

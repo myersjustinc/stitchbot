@@ -46,6 +46,10 @@ You need an account on `dailycrossstitch.com` in order for this to work. Once
 you have one, set the `STITCHBOT_USERNAME` and `STITCHBOT_PASSWORD` environment
 variables to your username and password on that site, respectively.
 
+You'll need `USER_FIRST_NAME` and `USER_LAST_NAME` environment variables, too,
+to fill out the checkout form. I'd suggest using the names you used when
+registering for your website account mentioned in the previous paragraph.
+
 You'll also need to keep track of `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET`
 and `GOOGLE_REFRESH_TOKEN` environment variables for authentication to Google
 Drive. To get those:
@@ -108,7 +112,7 @@ Here's how to do that:
 
     In our case, that'll mean running:
 
-        heroku config:set STITCHBOT_USERNAME='your_daily_cross_stitch_username' STITCHBOT_PASSWORD='your_daily_cross_stitch_password' GOOGLE_CLIENT_ID='your_client_id' GOOGLE_CLIENT_SECRET='your_client_secret' GOOGLE_REFRESH_TOKEN='your_refresh_token'
+        heroku config:set STITCHBOT_USERNAME='your_daily_cross_stitch_username' STITCHBOT_PASSWORD='your_daily_cross_stitch_password' GOOGLE_CLIENT_ID='your_client_id' GOOGLE_CLIENT_SECRET='your_client_secret' GOOGLE_REFRESH_TOKEN='your_refresh_token' USER_FIRST_NAME='your_first_name' USER_LAST_NAME='your_last_name'
 
     See the "Configuration" section above for more on obtaining those.
 
